@@ -127,6 +127,20 @@ describe("Blockchain", () => {
         newChain.addBlock({ data: "dogs" });
         newChain.addBlock({ data: "wolfs" });
       });
+
+      describe("and `validateTransactions` flag is true", () => {
+        it("challs validTransactionData()", () => {
+          const validTransactionDataMock = jest.fn();
+
+          blockchain.validTransactionData = validTransactionDataMock;
+
+          newChain.addBlock({ data: "foo" });
+          blockchain.replaceChain(newChain.chain, true);
+
+          expect(validTransactionDataMock).toHaveBeenCalled();
+        });
+      });
+
       describe("and the chain is invalid", () => {
         it("does not replace the chain", () => {
           newChain.chain[2].hash = "some-fake-hash";
@@ -209,11 +223,44 @@ describe("Blockchain", () => {
     });
 
     describe("and the transaction data has at least one malformed input", () => {
-      it("returns false", () => {});
+      it("returns false", () => {
+        wallet.balance = 9000;
+
+        const evilOutputMap = {
+          [wallet.publicKey]: 8900,
+          fooRecipient: 100,
+        };
+
+        const evilTransaction = {
+          input: {
+            timestamp: Date.now(),
+            amount: wallet.publicKey,
+            signature: wallet.sign(evilOutputMap),
+          },
+          outputMap: evilOutputMap,
+        };
+
+        newChain.addBlock({ data: [evilTransaction, rewardTransaction] });
+
+        expect(blockchain.validTransactionData({ chain: newChain.chain })).toBe(
+          false
+        );
+        expect(errorMock).toHaveBeenCalled();
+      });
     });
 
     describe("and a block contains multiple identical transactions", () => {
-      it("returns false", () => {});
+      it("returns false", () => {
+        newChain.addBlock({
+          data: [transaction, transaction, transaction, rewardTransaction],
+        });
+
+        expect(blockchain.validTransactionData({ chain: newChain.chain })).toBe(
+          false
+        );
+
+        expect(errorMock).toHaveBeenCalled();
+      });
     });
   });
 });

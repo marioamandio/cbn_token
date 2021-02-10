@@ -1,6 +1,7 @@
 const Block = require("./block");
 const Transaction = require("../wallet/transaction");
 const { cryptoHash } = require("../util");
+const Wallet = require("../wallet");
 const { REWARD_INPUT, MINING_REWARD } = require("../config");
 class Blockchain {
   constructor() {
@@ -45,7 +46,7 @@ class Blockchain {
     this.chain.push(newBlock);
   }
 
-  replaceChain(chain, onSuccess) {
+  replaceChain(chain, validateTransactions, onSuccess) {
     if (chain.length <= this.chain.length) {
       console.error("the incoming chain must be longer");
       return;
@@ -54,6 +55,11 @@ class Blockchain {
     if (!Blockchain.isValidChain(chain)) {
       console.error("the incoming chain must be valid");
 
+      return;
+    }
+
+    if (validateTransactions && !this.validTransactionData({ chain })) {
+      console.error("the incoming chain has invalid data");
       return;
     }
 
@@ -66,10 +72,9 @@ class Blockchain {
     for (let i = 1; i < chain.length; i++) {
       const block = chain[i];
       let rewardTransactionCount = 0;
-      console.log("called");
+      const transactionSet = new Set();
 
       for (let transaction of block.data) {
-        console.log("transaction");
         if (transaction.input.address === REWARD_INPUT.address) {
           rewardTransactionCount += 1;
 
@@ -83,10 +88,27 @@ class Blockchain {
             return false;
           }
         } else {
-          console.log(transaction, "transaction");
           if (!Transaction.validTransaction(transaction)) {
             console.error("invalid transaction");
             return false;
+          }
+
+          const trueBalance = Wallet.calculateBalance({
+            chain: this.chain,
+            address: transaction.input.address,
+          });
+          if (transaction.input.amount !== trueBalance) {
+            console.error("Invalid input amount");
+            return false;
+          }
+
+          if (transactionSet.has(transaction)) {
+            console.error(
+              "An identical transactions appears more than once in the block"
+            );
+            return false;
+          } else {
+            transactionSet.add(transaction);
           }
         }
       }
